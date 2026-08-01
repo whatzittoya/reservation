@@ -28,7 +28,7 @@ $err = static fn ($k) => isset($errors[$k]) ? '<div class="error">' . htmlspecia
 <div class="card" style="max-width:640px;">
     <form method="post" action="<?= $action ?>">
         <label>Customer <span class="muted" style="font-weight:400;">(must exist first)</span></label>
-        <select name="customer_id">
+        <select name="customer_id" id="customer_id">
             <option value="">— Select existing customer —</option>
             <?php foreach ($customers as $cust): ?>
                 <option value="<?= (int) $cust['id'] ?>" <?= $selCust === (int) $cust['id'] ? 'selected' : '' ?>>
@@ -274,5 +274,6 @@ function makeSearchable(select, placeholder){
     syncInput();
 }
 
+makeSearchable(document.getElementById('customer_id'), 'Search customer by name or phone…');
 makeSearchable(document.getElementById('tableName'), 'Search table…');
 </script>
