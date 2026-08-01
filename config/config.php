@@ -18,6 +18,14 @@ $config = [
     // colour — "Quinos Reservations" renders as Quinos + Reservations.
     'app_name' => getenv('APP_NAME') ?: 'Quinos Reservations',
 
+    // What this install books.
+    //   'resto' — a booking takes a table.
+    //   'spa'   — a booking takes a room AND a therapist, and both are locked
+    //             for that time slot (nobody else gets either one).
+    'type' => in_array(getenv('APP_TYPE') ?: 'resto', ['resto', 'spa'], true)
+        ? (string) (getenv('APP_TYPE') ?: 'resto')
+        : 'resto',
+
     'db' => [
         'host'    => getenv('DB_HOST') ?: '127.0.0.1',
         'port'    => getenv('DB_PORT') ?: '3306',

@@ -61,6 +61,10 @@ $renderer = new PhpRenderer(__DIR__ . '/templates', [
     'auth'     => $auth,
     'appName'  => (string) $config['app_name'],
     'brand'    => $brand,
+    // 'resto' | 'spa' — see config/config.php. Templates branch on this to show
+    // the therapist field/rows, and to call a bookable resource Table vs Room.
+    'appType'   => (string) $config['type'],
+    'roomLabel' => $config['type'] === 'spa' ? 'Room' : 'Table',
 ]);
 $renderer->setLayout('layout.php');
 

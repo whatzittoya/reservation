@@ -1,11 +1,12 @@
 <?php
 /** @var string $basePath */
 /** @var string $date */
-/** @var string $viewMode */    // 'room' | 'therapist'
 /** @var string $prevDate */
 /** @var string $nextDate */
 /** @var array $slots */
-/** @var array $groups */      // [ ['label'=>, 'tables'=>[ rows ]] ]
+/** @var array $groups */      // [ ['label'=>, 'kind'=>'table'|'therapist', 'tables'=>[ rows ]] ]
+/** @var string $appType */    // 'resto' | 'spa'
+/** @var string $roomLabel */  // 'Table' | 'Room'
 /** @var array $sectionIds */
 /** @var int|null $section */
 /** @var array $placed */      // rowKey => [slotIndex => reservation]
@@ -14,11 +15,10 @@ $e = static fn ($v) => htmlspecialchars((string) ($v ?? ''), ENT_QUOTES);
 $slotCount = count($slots);
 $colCount = $slotCount + 1;
 $prettyDate = date('l, d M Y', strtotime($date));
-$isTherapist = ($viewMode ?? 'room') === 'therapist';
-$resType = $isTherapist ? 'therapist' : 'table';
-// Suffix kept on date navigation (view for therapist, section for room).
-$navSuffix = $isTherapist ? '&view=therapist' : ($section ? '&section=' . (int) $section : '');
-$jsSuffix = $isTherapist ? " + '&view=therapist'" : ($section ? " + '&section=" . (int) $section . "'" : '');
+$isSpa = ($appType ?? 'resto') === 'spa';
+// Section filter is kept across date navigation.
+$navSuffix = $section ? '&section=' . (int) $section : '';
+$jsSuffix = $section ? " + '&section=" . (int) $section . "'" : '';
 ?>
 <style>
     .gridwrap{overflow:auto;max-height:72vh;border:1px solid var(--line);border-radius:10px;background:#fff;}
@@ -44,10 +44,6 @@ $jsSuffix = $isTherapist ? " + '&view=therapist'" : ($section ? " + '&section=" 
     .resblock small{color:var(--muted);}
     .segbtn{padding:6px 12px;border:1px solid var(--line);background:#fff;border-radius:8px;font-weight:600;font-size:13px;color:var(--ink);}
     .segbtn.on{background:var(--accent);border-color:var(--accent);}
-    .viewtabs{display:flex;gap:4px;background:#eef2f6;padding:4px;border-radius:10px;}
-    .viewtabs a{padding:6px 16px;border-radius:8px;font-weight:700;font-size:14px;color:var(--muted);}
-    .viewtabs a.on{background:var(--accent);color:#1f2933;}
-    .viewtabs a:hover{text-decoration:none;}
     .datenav{display:flex;align-items:center;gap:8px;}
     .datenav .date{border:1px solid var(--accent);border-radius:8px;padding:8px 16px;font-weight:700;min-width:200px;text-align:center;}
     .totbar{display:flex;gap:22px;flex-wrap:wrap;margin-top:12px;color:var(--muted);font-size:14px;}
@@ -61,11 +57,8 @@ $jsSuffix = $isTherapist ? " + '&view=therapist'" : ($section ? " + '&section=" 
 </style>
 
 <div class="toolbar">
-    <div class="viewtabs">
-        <a class="<?= !$isTherapist ? 'on' : '' ?>" href="<?= $basePath ?>/grid?date=<?= $e($date) ?>&view=room">Room</a>
-        <a class="<?= $isTherapist ? 'on' : '' ?>" href="<?= $basePath ?>/grid?date=<?= $e($date) ?>&view=therapist">Therapist</a>
-    </div>
-    <a class="btn btn-primary" href="<?= $basePath ?>/reservations/new?type=<?= $resType ?>&date=<?= $e($date) ?>">+ New <?= $isTherapist ? 'therapy' : 'reservation' ?></a>
+    <h1><?= $isSpa ? 'Rooms &amp; therapists' : 'Tables' ?></h1>
+    <a class="btn btn-primary" href="<?= $basePath ?>/reservations/new?date=<?= $e($date) ?>">+ New reservation</a>
 </div>
 
 <div class="toolbar" style="margin-top:-6px;">
@@ -89,22 +82,20 @@ $jsSuffix = $isTherapist ? " + '&view=therapist'" : ($section ? " + '&section=" 
     </div>
 </div>
 
-<?php if (!$isTherapist): ?>
 <div class="toolbar" style="margin-top:-6px;">
     <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        <a class="segbtn <?= $section === null ? 'on' : '' ?>" href="<?= $basePath ?>/grid?date=<?= $e($date) ?>&view=room">All sections</a>
+        <a class="segbtn <?= $section === null ? 'on' : '' ?>" href="<?= $basePath ?>/grid?date=<?= $e($date) ?>">All sections</a>
         <?php foreach ($sectionIds as $sid): ?>
-            <a class="segbtn <?= $section === $sid ? 'on' : '' ?>" href="<?= $basePath ?>/grid?date=<?= urlencode($date) ?>&view=room&section=<?= $sid ?>"><?= $e(\App\TableRepository::sectionLabel($sid)) ?></a>
+            <a class="segbtn <?= $section === $sid ? 'on' : '' ?>" href="<?= $basePath ?>/grid?date=<?= urlencode($date) ?>&section=<?= $sid ?>"><?= $e(\App\TableRepository::sectionLabel($sid)) ?></a>
         <?php endforeach; ?>
     </div>
 </div>
-<?php endif; ?>
 
 <div class="gridwrap">
     <table class="grid">
         <thead>
             <tr>
-                <th class="corner"><?= $isTherapist ? 'Therapist' : 'Table' ?></th>
+                <th class="corner"><?= $e($roomLabel ?? 'Table') ?></th>
                 <?php foreach ($slots as $s): ?>
                     <th class="<?= $s['isHour'] ? '' : 'half' ?>"><?= $s['isHour'] ? $e($s['label']) : '' ?></th>
                 <?php endforeach; ?>
@@ -113,7 +104,7 @@ $jsSuffix = $isTherapist ? " + '&view=therapist'" : ($section ? " + '&section=" 
         <tbody>
         <?php if ($groups === [] || array_sum(array_map(fn ($g) => count($g['tables']), $groups)) === 0): ?>
             <tr><td class="rowhead">—</td><td colspan="<?= $slotCount ?>" class="muted" style="padding:12px;">
-                <?= $isTherapist ? 'No therapists found. Seed employees with jobTitle THERAPIST.' : 'No tables.' ?>
+                No bookable rows. Add rows to tbl_tables<?= $isSpa ? ', and employees with jobTitle THERAPIST' : '' ?>.
             </td></tr>
         <?php endif; ?>
         <?php foreach ($groups as $group): ?>
@@ -121,11 +112,13 @@ $jsSuffix = $isTherapist ? " + '&view=therapist'" : ($section ? " + '&section=" 
             <tr class="sectionrow"><td colspan="<?= $colCount ?>"><?= $e($group['label']) ?></td></tr>
             <?php foreach ($group['tables'] as $t): ?>
                 <?php
+                    // Therapist rows key on employee id, resource rows on name;
+                    // the prefix keeps room "1" and therapist #1 apart.
+                    $isTherRow = ($group['kind'] ?? 'table') === 'therapist';
                     $rowName = (string) $t['name'];
-                    $rowKey  = $isTherapist ? (string) (int) $t['id'] : $rowName;
-                    $newLink = $isTherapist
-                        ? $basePath . '/reservations/new?type=therapist&therapist=' . (int) $t['id']
-                        : $basePath . '/reservations/new?type=table&table=' . urlencode($rowName);
+                    $rowKey  = $isTherRow ? 'e:' . (int) $t['id'] : 't:' . $rowName;
+                    $newLink = $basePath . '/reservations/new?'
+                        . ($isTherRow ? 'therapist=' . (int) $t['id'] : 'table=' . urlencode($rowName));
                     $map = $placed[$rowKey] ?? [];
                 ?>
                 <tr>
@@ -133,11 +126,21 @@ $jsSuffix = $isTherapist ? " + '&view=therapist'" : ($section ? " + '&section=" 
                     <?php foreach ($slots as $s): $idx = $s['index']; ?>
                         <?php if (isset($map[$idx])): $r = $map[$idx]; $st = (int) $r['status']; ?>
                             <td class="cell">
+                                <?php
+                                    // On a room row show who serves it; on a therapist
+                                    // row show which room — so each cell names the pair.
+                                    $pair = $isTherRow
+                                        ? (string) ($r['tableName'] ?? '')
+                                        : (string) ($isSpa ? ($r['served_by_name'] ?? '') : '');
+                                    $sub = $pair !== '' ? $pair . ' · ' . (int) $r['cover'] . ' pax'
+                                                        : (int) $r['cover'] . ' pax';
+                                ?>
                                 <a class="resblock s<?= $st ?>" href="<?= $basePath ?>/reservations/<?= (int) $r['id'] ?>"
+                                   data-res="<?= (int) $r['id'] ?>"
                                    data-name="<?= $e($r['customer_name'] ?? $r['name']) ?>"
-                                   title="<?= $e($r['customer_name'] ?? $r['name']) ?> — <?= $e(substr((string)$r['reservationTime'],11,5)) ?>">
+                                   title="<?= $e($r['customer_name'] ?? $r['name']) ?> — <?= $e(substr((string)$r['reservationTime'],11,5)) ?><?= $pair !== '' ? ' — ' . $e($pair) : '' ?>">
                                     <b><?= $e($r['customer_name'] ?? $r['name'] ?: 'Guest') ?></b>
-                                    <small><?= (int) $r['cover'] ?> pax</small>
+                                    <small><?= $e($sub) ?></small>
                                 </a>
                             </td>
                         <?php else: ?>
@@ -167,6 +170,9 @@ $jsSuffix = $isTherapist ? " + '&view=therapist'" : ($section ? " + '&section=" 
     var count = document.getElementById('qsCount');
     if (!box) return;
     var blocks = Array.prototype.slice.call(document.querySelectorAll('.resblock'));
+    var ids = {};
+    blocks.forEach(function (b) { ids[b.getAttribute('data-res')] = 1; });
+    var total = Object.keys(ids).length;
 
     function apply() {
         var q = box.value.trim().toLowerCase();
@@ -176,15 +182,17 @@ $jsSuffix = $isTherapist ? " + '&view=therapist'" : ($section ? " + '&section=" 
             count.classList.remove('none');
             return;
         }
-        var hits = [];
+        var hits = [], hitIds = {};
         blocks.forEach(function (b) {
             var hit = (b.getAttribute('data-name') || '').toLowerCase().indexOf(q) !== -1;
             b.classList.toggle('qs-hit', hit);
             b.classList.toggle('qs-dim', !hit);
-            if (hit) hits.push(b);
+            if (hit) { hits.push(b); hitIds[b.getAttribute('data-res')] = 1; }
         });
-        count.textContent = hits.length + ' of ' + blocks.length + ' booking' +
-            (blocks.length === 1 ? '' : 's');
+        // In spa mode one booking occupies two cells (room + therapist), so
+        // count distinct reservations rather than highlighted blocks.
+        var found = Object.keys(hitIds).length;
+        count.textContent = found + ' of ' + total + ' booking' + (total === 1 ? '' : 's');
         count.classList.toggle('none', hits.length === 0);
         if (hits.length) hits[0].scrollIntoView({block: 'nearest', inline: 'center'});
     }

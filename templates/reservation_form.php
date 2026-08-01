@@ -8,6 +8,8 @@
 /** @var array $therapists */
 /** @var array $slotTimes */
 /** @var array $statuses */
+/** @var string $appType */    // 'resto' | 'spa'
+/** @var string $roomLabel */  // 'Table' | 'Room'
 $e = static fn ($v) => htmlspecialchars((string) ($v ?? ''), ENT_QUOTES);
 $isEdit = $mode === 'edit';
 $id = (int) ($id ?? 0);
@@ -15,9 +17,9 @@ $action = $isEdit ? $basePath . '/reservations/' . $id : $basePath . '/reservati
 $selCust = (int) ($data['customer_id'] ?? 0);
 $selTable = (string) ($data['tableName'] ?? '');
 $selStatus = (int) ($data['status'] ?? 0);
-$selType = ($data['res_type'] ?? 'table') === 'therapist' ? 'therapist' : 'table';
 $selTherapist = (int) ($data['therapist_id'] ?? 0);
-$isTher = $selType === 'therapist';
+// Spa bookings take a room AND a therapist; both are locked for the slot.
+$isSpa = ($appType ?? 'resto') === 'spa';
 $err = static fn ($k) => isset($errors[$k]) ? '<div class="error">' . htmlspecialchars($errors[$k]) . '</div>' : '';
 ?>
 <div class="toolbar">
@@ -56,40 +58,29 @@ $err = static fn ($k) => isset($errors[$k]) ? '<div class="error">' . htmlspecia
             </div>
         </details>
 
-        <label style="margin-top:16px;">Reserve</label>
-        <div class="seg" style="display:flex;gap:6px;">
-            <button type="button" id="rt-table" onclick="setResType('table')"
-                    class="btn <?= !$isTher ? 'btn-primary' : '' ?>">Table / Room</button>
-            <button type="button" id="rt-therapist" onclick="setResType('therapist')"
-                    class="btn <?= $isTher ? 'btn-primary' : '' ?>">Therapist</button>
-        </div>
-        <input type="hidden" name="res_type" id="res_type" value="<?= $selType ?>">
+        <label style="margin-top:16px;"><?= $e($roomLabel ?? 'Table') ?></label>
+        <select name="tableName" id="tableName">
+            <option value="">— Select <?= strtolower($e($roomLabel ?? 'table')) ?> —</option>
+            <?php foreach ($groups as $group): ?>
+                <optgroup label="<?= $e($group['label']) ?>">
+                    <?php foreach ($group['tables'] as $t): ?>
+                        <option value="<?= $e($t['name']) ?>" <?= $selTable === (string) $t['name'] ? 'selected' : '' ?>><?= $e($t['name']) ?></option>
+                    <?php endforeach; ?>
+                </optgroup>
+            <?php endforeach; ?>
+        </select>
+        <?= $err('tableName') ?>
 
-        <div id="fields-table" style="margin-top:10px;<?= $isTher ? 'display:none;' : '' ?>">
-            <label>Table</label>
-            <select name="tableName" id="tableName">
-                <option value="">— Select table —</option>
-                <?php foreach ($groups as $group): ?>
-                    <optgroup label="<?= $e($group['label']) ?>">
-                        <?php foreach ($group['tables'] as $t): ?>
-                            <option value="<?= $e($t['name']) ?>" <?= $selTable === (string) $t['name'] ? 'selected' : '' ?>><?= $e($t['name']) ?></option>
-                        <?php endforeach; ?>
-                    </optgroup>
-                <?php endforeach; ?>
-            </select>
-            <?= $err('tableName') ?>
-        </div>
-
-        <div id="fields-therapist" style="margin-top:10px;<?= !$isTher ? 'display:none;' : '' ?>">
+        <?php if ($isSpa): ?>
             <label>Therapist</label>
-            <select name="therapist_id">
+            <select name="therapist_id" id="therapist_id">
                 <option value="">— Select therapist —</option>
                 <?php foreach ($therapists as $t): ?>
                     <option value="<?= (int) $t['id'] ?>" <?= $selTherapist === (int) $t['id'] ? 'selected' : '' ?>><?= $e($t['name']) ?></option>
                 <?php endforeach; ?>
             </select>
             <?= $err('therapist_id') ?>
-        </div>
+        <?php endif; ?>
 
         <div class="row" style="margin-top:14px;">
             <div>
@@ -134,15 +125,6 @@ $err = static fn ($k) => isset($errors[$k]) ? '<div class="error">' . htmlspecia
     </form>
 </div>
 <script>
-function setResType(t){
-    document.getElementById('res_type').value = t;
-    document.getElementById('fields-table').style.display = (t === 'table') ? '' : 'none';
-    document.getElementById('fields-therapist').style.display = (t === 'therapist') ? '' : 'none';
-    var bt = document.getElementById('rt-table'), bth = document.getElementById('rt-therapist');
-    bt.classList.toggle('btn-primary', t === 'table');
-    bth.classList.toggle('btn-primary', t === 'therapist');
-}
-
 /* Turn a <select> into a type-to-filter combobox. The original select stays in
    the DOM (hidden) and keeps holding the value, so the form posts exactly the
    same field and server-side validation/`selected` still work. */
@@ -275,5 +257,6 @@ function makeSearchable(select, placeholder){
 }
 
 makeSearchable(document.getElementById('customer_id'), 'Search customer by name or phone…');
-makeSearchable(document.getElementById('tableName'), 'Search table…');
+makeSearchable(document.getElementById('tableName'), 'Search <?= strtolower($e($roomLabel ?? 'table')) ?>…');
+makeSearchable(document.getElementById('therapist_id'), 'Search therapist…');
 </script>

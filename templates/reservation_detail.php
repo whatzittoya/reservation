@@ -7,21 +7,21 @@ $r = $reservation;
 $st = (int) $r['status'];
 $date = substr((string) $r['reservationTime'], 0, 10);
 $isOwner = $auth->isOwner();
-$isTherapy = !empty($r['servedBy_id']);
+$isSpa = ($appType ?? 'resto') === 'spa';
+$hasTherapist = !empty($r['servedBy_id']);
 ?>
 <div class="toolbar">
     <h1>Reservation #<?= (int) $r['id'] ?></h1>
-    <a class="btn" href="<?= $basePath ?>/grid?date=<?= $e($date) ?><?= $isTherapy ? '&view=therapist' : '' ?>">← Back to grid</a>
+    <a class="btn" href="<?= $basePath ?>/grid?date=<?= $e($date) ?>">← Back to grid</a>
 </div>
 
 <div class="card" style="max-width:560px;">
     <table class="list">
         <tr><th>Customer</th><td><?= $e($r['customer_name'] ?? $r['name']) ?: '<span class="muted">—</span>' ?></td></tr>
         <tr><th>Status</th><td><span class="badge s<?= $st ?>"><?= $e(\App\ReservationRepository::statusLabel($st)) ?></span></td></tr>
-        <?php if ($isTherapy): ?>
+        <tr><th><?= $e($roomLabel ?? 'Table') ?></th><td><?= $e($r['tableName']) ?: '<span class="muted">—</span>' ?></td></tr>
+        <?php if ($isSpa || $hasTherapist): ?>
             <tr><th>Therapist</th><td><?= $e($r['served_by_name']) ?: '<span class="muted">—</span>' ?></td></tr>
-        <?php else: ?>
-            <tr><th>Table</th><td><?= $e($r['tableName']) ?: '<span class="muted">—</span>' ?></td></tr>
         <?php endif; ?>
         <tr><th>Date &amp; time</th><td><?= $e(date('l, d M Y — H:i', strtotime((string) $r['reservationTime']))) ?></td></tr>
         <tr><th>Guests</th><td><?= (int) $r['cover'] ?> pax</td></tr>

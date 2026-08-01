@@ -21,10 +21,10 @@ Built on [Slim 4](https://www.slimframework.com/) with plain PDO. It uses your
 - **Month calendar** — per-day booking counts; click a day to open its grid.
 - **Customer-first booking** — pick an existing customer or add one inline; the
   reservation stores `customer_id` and records who booked it (`reservedBy_id`).
-- **Room / Therapist modes** — the grid has a `[Room] [Therapist]` toggle. Room view
-  books a **table**; Therapist view books a **therapist** instead. A therapy booking is
-  stored on `tbl_reservation.servedBy_id` (no table). Same-therapist/same-time/same-day
-  is blocked, just like tables.
+- **Resto or spa** — set `type` in `config/config.php`. In *spa* mode every booking
+  takes a room **and** a therapist, and both are locked for that slot: if room 101
+  and therapist A are booked at 07:00, nobody else gets either one at 07:00. The
+  therapist is stored on `tbl_reservation.servedBy_id`, the room on `tableName`.
 
 ### Therapists
 
@@ -71,12 +71,26 @@ Owner detection keywords live in `config/config.php` → `owner_title_keywords`.
 
 ```
 Name: app_name  "Quinos Reservations"  (first word plain, rest in accent colour)
+Type: type      'resto' | 'spa'
 DB:   host 127.0.0.1  db db_reservation  user root  pass (from DB_PASS)
 Grid: 07:00 – 21:00, 30-minute slots
 ```
 
 Rename the app by setting `app_name` — it drives the header, login page, search
 page, and browser titles. `APP_NAME` works as an env var too.
+
+**`type` decides what a booking occupies** (`APP_TYPE` env var also works):
+
+| | `resto` | `spa` |
+|---|---|---|
+| A booking takes | a table | a **room and a therapist** |
+| Locked for the slot | that table | **both** the room and the therapist |
+| Grid rows | tables by section | rooms by section, then a `Therapists` group |
+| Booking form | customer + table | customer + room + therapist (all required) |
+
+In spa mode a booking is drawn in **two** cells — its room and its therapist —
+so both locks are visible on one board. Any row in `tbl_tables` is bookable as a
+room; therapists are employees with `jobTitle = 'THERAPIST'`.
 
 All DB values can be overridden with env vars (`DB_HOST`, `DB_NAME`, `DB_USER`,
 `DB_PASS`, …) without editing code. **No password is committed.** Put machine
@@ -100,7 +114,7 @@ php -S 127.0.0.1:8099 index.php   # http://127.0.0.1:8099
 |---|---|---|---|
 | GET/POST | `/login`, `/logout` | any | Session auth |
 | GET | `/search?q=&scope=today\|all` | staff | Landing page: search box + results |
-| GET | `/grid?date=&view=room\|therapist&section=` | staff | Table/Therapist × time board |
+| GET | `/grid?date=&section=` | staff | Resource × time board |
 | GET | `/calendar?month=` | staff | Month overview |
 | GET/POST | `/reservations/new`, `/reservations` | staff | Create booking |
 | GET | `/reservations/{id}` | staff | Booking detail |

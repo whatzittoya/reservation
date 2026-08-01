@@ -97,12 +97,12 @@ $isToday = $scope !== 'all';
                 <p class="muted" style="margin:0;">No booking matches “<?= $e($q) ?>”<?= $isToday ? ' today' : '' ?>.</p>
             <?php else: ?>
                 <table class="list">
-                    <tr><th>Customer</th><th>When</th><th>Table / Therapist</th><th>Pax</th><th>Status</th></tr>
+                    <tr><th>Customer</th><th>When</th><th><?= $e($roomLabel ?? 'Table') ?> / Therapist</th><th>Pax</th><th>Status</th></tr>
                     <?php foreach ($bookings as $b): $st = (int) $b['status']; ?>
                         <tr>
                             <td><a href="<?= $basePath ?>/reservations/<?= (int) $b['id'] ?>"><?= $e($b['customer_name'] ?? $b['name'] ?: 'Guest') ?></a></td>
                             <td><?= $e(date('D, d M Y — H:i', strtotime((string) $b['reservationTime']))) ?></td>
-                            <td><?= $e(!empty($b['servedBy_id']) ? ($b['served_by_name'] ?? 'Therapist') : $b['tableName']) ?: '<span class="muted">—</span>' ?></td>
+                            <td><?= $e(trim(implode(' · ', array_filter([(string) ($b['tableName'] ?? ''), (string) ($b['served_by_name'] ?? '')])))) ?: '<span class="muted">—</span>' ?></td>
                             <td><?= (int) $b['cover'] ?></td>
                             <td><span class="badge s<?= $st ?>"><?= $e(\App\ReservationRepository::statusLabel($st)) ?></span></td>
                         </tr>

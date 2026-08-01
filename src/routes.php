@@ -101,40 +101,44 @@ return function (App $app, array $c): void {
 
     /* =========================================================== Grid */
 
-    $app->get('/grid', function (Request $req, Response $res) use ($view, $tables, $reservations, $employees, $grid, $today) {
+    $app->get('/grid', function (Request $req, Response $res) use ($view, $tables, $reservations, $employees, $grid, $today, $c) {
+        $isSpa = $c['config']['type'] === 'spa';
         $params = $req->getQueryParams();
         $date = preg_match('/^\d{4}-\d{2}-\d{2}$/', $params['date'] ?? '') ? $params['date'] : $today();
-        $viewMode = ($params['view'] ?? 'room') === 'therapist' ? 'therapist' : 'room';
         $section = isset($params['section']) && $params['section'] !== 'all' && $params['section'] !== ''
             ? (int) $params['section'] : null;
 
-        if ($viewMode === 'therapist') {
-            // Rows = therapists; placement keyed by servedBy_id.
-            $groups = [['label' => 'Therapists', 'tables' => $employees->therapists()]];
-            $keyOf = static fn (array $r): ?string => $r['servedBy_id'] !== null ? (string) (int) $r['servedBy_id'] : null;
-        } else {
-            // Rows = tables grouped by section; placement keyed by tableName.
-            $groups = $tables->groupedBySection($section);
-            $keyOf = static fn (array $r): ?string => (string) $r['tableName'];
+        // Rows: bookable resources grouped by section. In spa mode the
+        // therapists follow as one more group, so a single board shows both
+        // things a booking locks. 'kind' tells the template how to render.
+        $groups = [];
+        foreach ($tables->groupedBySection($section) as $g) {
+            $groups[] = $g + ['kind' => 'table'];
+        }
+        if ($isSpa) {
+            $groups[] = ['label' => 'Therapists', 'kind' => 'therapist', 'tables' => $employees->therapists()];
         }
 
-        // Build lookup: rowKey => [ slotIndex => reservation ]
+        // Lookup: rowKey => [ slotIndex => reservation ]. A spa booking lands in
+        // TWO rows — its room and its therapist — because it occupies both.
+        // Keys are prefixed so room "1" can't collide with therapist id 1.
         $placed = [];
         foreach ($reservations->forDate($date) as $r) {
-            $key = $keyOf($r);
-            if ($key === null || $key === '') {
+            $idx = $grid->slotIndexFor(substr((string) $r['reservationTime'], 11, 5));
+            if ($idx === null) {
                 continue;
             }
-            $idx = $grid->slotIndexFor(substr((string) $r['reservationTime'], 11, 5));
-            if ($idx !== null) {
-                $placed[$key][$idx] = $r;
+            if (!empty($r['tableName'])) {
+                $placed['t:' . $r['tableName']][$idx] = $r;
+            }
+            if (!empty($r['servedBy_id'])) {
+                $placed['e:' . (int) $r['servedBy_id']][$idx] = $r;
             }
         }
 
         return $view->render($res, 'grid.php', [
             'title'      => 'Reservations — ' . $date,
             'date'       => $date,
-            'viewMode'   => $viewMode,
             'prevDate'   => date('Y-m-d', strtotime($date . ' -1 day')),
             'nextDate'   => date('Y-m-d', strtotime($date . ' +1 day')),
             'slots'      => $grid->slots(),
@@ -171,12 +175,10 @@ return function (App $app, array $c): void {
 
     $app->get('/reservations/new', function (Request $req, Response $res) use ($view, $customers, $tables, $employees, $slotTimes, $today) {
         $q = $req->getQueryParams();
-        $resType = ($q['type'] ?? 'table') === 'therapist' ? 'therapist' : 'table';
         return $view->render($res, 'reservation_form.php', [
             'title'      => 'New Reservation',
             'mode'       => 'create',
             'data'       => [
-                'res_type'     => $resType,
                 'tableName'    => $q['table'] ?? '',
                 'therapist_id' => (int) ($q['therapist'] ?? 0),
                 'booking_date' => preg_match('/^\d{4}-\d{2}-\d{2}$/', $q['date'] ?? '') ? $q['date'] : $today(),
@@ -195,9 +197,9 @@ return function (App $app, array $c): void {
 
     // Validate + resolve customer, shared by create/update.
     // $exceptId lets an edit skip the conflict check against its own row.
-    $prepare = function (array $body, ?int $exceptId = null) use ($customers, $tables, $employees, $reservations): array {
+    $prepare = function (array $body, ?int $exceptId = null) use ($customers, $tables, $employees, $reservations, $c): array {
         $errors = [];
-        $resType = ($body['res_type'] ?? 'table') === 'therapist' ? 'therapist' : 'table';
+        $isSpa = $c['config']['type'] === 'spa';
         $date = trim((string) ($body['booking_date'] ?? ''));
         $time = trim((string) ($body['booking_time'] ?? ''));
         $tableName = trim((string) ($body['tableName'] ?? ''));
@@ -218,10 +220,19 @@ return function (App $app, array $c): void {
 
         $reservationTime = $date . ' ' . $time . ':00';
         $servedById = null;
+        $timeOk = !isset($errors['booking_date']) && !isset($errors['booking_time']);
+        $resourceWord = $isSpa ? 'room' : 'table';
 
-        if ($resType === 'therapist') {
-            // Therapy booking: pick a therapist (servedBy_id); no table.
-            $tableName = null;
+        // Every booking takes a table/room…
+        if ($tableName === '') {
+            $errors['tableName'] = 'Select a ' . $resourceWord . '.';
+        } elseif ($timeOk && $reservations->slotTaken($tableName, $reservationTime, $exceptId)) {
+            $errors['tableName'] = 'This ' . $resourceWord . ' is already booked at that time — pick another time or '
+                . $resourceWord . '.';
+        }
+
+        // …and in spa mode a therapist as well, locked for the same slot.
+        if ($isSpa) {
             $validTherapist = false;
             foreach ($employees->therapists() as $t) {
                 if ((int) $t['id'] === $therapistId) {
@@ -231,20 +242,10 @@ return function (App $app, array $c): void {
             }
             if (!$validTherapist) {
                 $errors['therapist_id'] = 'Select a therapist.';
-            } elseif (!isset($errors['booking_date']) && !isset($errors['booking_time'])
-                && $reservations->therapistTaken($therapistId, $reservationTime, $exceptId)) {
+            } elseif ($timeOk && $reservations->therapistTaken($therapistId, $reservationTime, $exceptId)) {
                 $errors['therapist_id'] = 'This therapist is already booked at that time — pick another time or therapist.';
             }
             $servedById = $validTherapist ? $therapistId : null;
-        } else {
-            // Table/room booking.
-            if ($tableName === '') {
-                $errors['tableName'] = 'Select a table.';
-            }
-            $timeFieldsOk = !isset($errors['tableName']) && !isset($errors['booking_date']) && !isset($errors['booking_time']);
-            if ($timeFieldsOk && $reservations->slotTaken($tableName, $reservationTime, $exceptId)) {
-                $errors['tableName'] = 'This table is already booked at that time — pick another time or table.';
-            }
         }
 
         // Resolve customer: existing id OR inline new customer.
@@ -319,8 +320,7 @@ return function (App $app, array $c): void {
         $data['reservedBy_id'] = $auth->id();
         $reservations->create($data);
 
-        $view_q = $data['servedBy_id'] ? '&view=therapist' : '';
-        return $redirect($res, '/grid?date=' . substr($data['reservationTime'], 0, 10) . $view_q);
+        return $redirect($res, '/grid?date=' . substr($data['reservationTime'], 0, 10));
     });
 
     $app->get('/reservations/{id:[0-9]+}', function (Request $req, Response $res, array $args) use ($view, $reservations, $auth) {
@@ -357,13 +357,11 @@ return function (App $app, array $c): void {
             $res->getBody()->write('Reservation not found');
             return $res->withStatus(404);
         }
-        $isTherapy = !empty($r['servedBy_id']);
         return $view->render($res, 'reservation_form.php', [
             'title'      => 'Edit Reservation #' . $r['id'],
             'mode'       => 'edit',
             'id'         => (int) $r['id'],
             'data'       => [
-                'res_type'     => $isTherapy ? 'therapist' : 'table',
                 'tableName'    => $r['tableName'],
                 'therapist_id' => (int) ($r['servedBy_id'] ?? 0),
                 'booking_date' => substr((string) $r['reservationTime'], 0, 10),
@@ -401,8 +399,7 @@ return function (App $app, array $c): void {
             ]);
         }
         $reservations->update($id, $data);
-        $view_q = $data['servedBy_id'] ? '&view=therapist' : '';
-        return $redirect($res, '/grid?date=' . substr($data['reservationTime'], 0, 10) . $view_q);
+        return $redirect($res, '/grid?date=' . substr($data['reservationTime'], 0, 10));
     });
 
     $app->post('/reservations/{id:[0-9]+}/cancel', function (Request $req, Response $res, array $args) use ($reservations, $redirect) {
