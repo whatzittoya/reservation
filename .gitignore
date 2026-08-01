@@ -1,0 +1,7 @@
+# Keep vendor/ committed so it can be copied to XAMPP without Composer.
+# (Comment out the line below if you prefer running `composer install` on the server.)
+# /vendor/
+
+.env
+.DS_Store
+*.log

@@ -1,0 +1,23 @@
+# Front controller for XAMPP / Apache.
+# Works at localhost/reservation without touching httpd.conf.
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Serve existing files/directories directly (assets, etc.)
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # Everything else goes through the Slim front controller.
+    RewriteRule ^ index.php [QSA,L]
+</IfModule>
+
+# Never serve source, config, dependencies, or SQL over HTTP.
+RewriteRule ^(config|src|templates|vendor|sql)/ - [F,L]
+
+<FilesMatch "\.(sql|md|json|lock|dist|ya?ml)$">
+    Require all denied
+</FilesMatch>
+
+Options -Indexes
