@@ -5,7 +5,7 @@ $e = static fn ($v) => htmlspecialchars((string) ($v ?? ''), ENT_QUOTES);
 ?>
 <div style="max-width:360px;margin:8vh auto 0;">
     <div style="text-align:center;margin-bottom:18px;">
-        <div style="font-weight:800;font-size:22px;">Quinos <span style="color:var(--accent);">Reservations</span></div>
+        <div class="brand" style="font-size:22px;"><?= $brand() ?></div>
         <div class="muted" style="font-size:13px;margin-top:4px;">Staff sign in</div>
     </div>
     <div class="card">

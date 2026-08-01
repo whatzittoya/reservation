@@ -5,6 +5,7 @@
 /** @var \App\Auth $auth */
 $user = $auth->user();
 $e = static fn ($v) => htmlspecialchars((string) ($v ?? ''), ENT_QUOTES);
+$appName = (string) ($appName ?? 'Reservations');
 $nav = static function (string $href, string $label, string $current) use ($basePath, $e) {
     $active = str_starts_with($current, $href) ? ' active' : '';
     echo '<a class="navlink' . $active . '" href="' . $basePath . $href . '">' . $e($label) . '</a>';
@@ -16,7 +17,7 @@ $rel = $basePath !== '' && str_starts_with($path, $basePath) ? substr($path, str
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><?= $e($title ?? 'Reservation') ?></title>
+    <title><?= $e($title ?? $appName) ?></title>
     <style>
         :root{
             --bg:#f4f6f8; --card:#fff; --line:#e2e6ea; --ink:#1f2933; --muted:#7b8794;
@@ -90,7 +91,7 @@ $rel = $basePath !== '' && str_starts_with($path, $basePath) ? substr($path, str
 <?php if ($user): ?>
     <header>
         <div class="bar">
-            <a class="brand" href="<?= $basePath ?>/search" title="Search bookings &amp; customers">Quinos <span>Reservations</span></a>
+            <a class="brand" href="<?= $basePath ?>/search" title="Search bookings &amp; customers"><?= $brand() ?></a>
             <nav class="main">
                 <?php $nav('/grid', 'Grid', $rel); ?>
                 <?php $nav('/calendar', 'Calendar', $rel); ?>

@@ -12,7 +12,12 @@
 
 declare(strict_types=1);
 
-return [
+$config = [
+    // Shown in the header, the login page, the search page, and page titles.
+    // Everything before the first space is plain, the rest takes the accent
+    // colour — "Quinos Reservations" renders as Quinos + Reservations.
+    'app_name' => getenv('APP_NAME') ?: 'Quinos Reservations',
+
     'db' => [
         'host'    => getenv('DB_HOST') ?: '127.0.0.1',
         'port'    => getenv('DB_PORT') ?: '3306',
@@ -42,3 +47,17 @@ return [
     // Show detailed errors. Set to false in production.
     'displayErrorDetails' => true,
 ];
+
+/*
+ * Local overrides — config/local.php is gitignored, so this is where a machine's
+ * real DB password lives without ever reaching the repo. Return only the keys
+ * you want to change, e.g.:
+ *
+ *     <?php return ['db' => ['pass' => 'your-password']];
+ */
+$local = __DIR__ . '/local.php';
+if (is_file($local)) {
+    $config = array_replace_recursive($config, (array) require $local);
+}
+
+return $config;

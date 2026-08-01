@@ -70,8 +70,9 @@ return function (App $app, array $c): void {
 
     /* =========================================================== Home */
 
-    $app->get('/', function (Request $req, Response $res) use ($redirect, $today) {
-        return $redirect($res, '/grid?date=' . $today());
+    // Landing page after login is the search box; the grid is a click away.
+    $app->get('/', function (Request $req, Response $res) use ($redirect) {
+        return $redirect($res, '/search');
     });
 
     /* ========================================================= Search */
@@ -80,14 +81,21 @@ return function (App $app, array $c): void {
      * Search page — reached from the brand in the header. Shows a big centred
      * box; with a query it lists matching customers and bookings on any date.
      */
-    $app->get('/search', function (Request $req, Response $res) use ($view, $customers, $reservations) {
-        $q = trim((string) ($req->getQueryParams()['q'] ?? ''));
+    $app->get('/search', function (Request $req, Response $res) use ($view, $customers, $reservations, $today) {
+        $params = $req->getQueryParams();
+        $q = trim((string) ($params['q'] ?? ''));
+        // Today unless explicitly widened, so the common front-desk lookup is
+        // one keystroke away and old bookings don't bury it.
+        $scope = ($params['scope'] ?? 'today') === 'all' ? 'all' : 'today';
+        $onDate = $scope === 'today' ? $today() : null;
 
         return $view->render($res, 'search.php', [
             'title'     => $q === '' ? 'Search' : 'Search — ' . $q,
             'q'         => $q,
-            'customers' => $q === '' ? [] : $customers->search($q, 20),
-            'bookings'  => $q === '' ? [] : $reservations->search($q, 30),
+            'scope'     => $scope,
+            'today'     => $today(),
+            'customers' => $q === '' ? [] : $customers->search($q, 20, $onDate),
+            'bookings'  => $q === '' ? [] : $reservations->search($q, 30, $onDate),
         ]);
     });
 

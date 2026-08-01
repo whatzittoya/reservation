@@ -45,9 +45,22 @@ $tables       = new TableRepository($pdo);
 $reservations = new ReservationRepository($pdo);
 $auth         = new Auth($employees, $config['owner_title_keywords']);
 
+/**
+ * Brand mark for the header, login and search pages: the first word plain,
+ * everything after it in the accent colour. Returns ready-to-echo HTML.
+ */
+$brand = static function (?string $name = null) use ($config): string {
+    $esc   = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES);
+    $parts = explode(' ', (string) ($name ?? $config['app_name']), 2);
+
+    return $esc($parts[0]) . (isset($parts[1]) ? ' <span>' . $esc($parts[1]) . '</span>' : '');
+};
+
 $renderer = new PhpRenderer(__DIR__ . '/templates', [
     'basePath' => $basePath,
     'auth'     => $auth,
+    'appName'  => (string) $config['app_name'],
+    'brand'    => $brand,
 ]);
 $renderer->setLayout('layout.php');
 

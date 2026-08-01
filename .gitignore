@@ -5,3 +5,6 @@
 .env
 .DS_Store
 *.log
+
+# Machine-local config overrides (DB password etc.)
+/config/local.php

@@ -43,11 +43,14 @@ final class CustomerRepository
     }
 
     /**
-     * Free-text search on name / phone / email, for the header search box.
+     * Free-text search on name / phone / email, for the search page.
+     *
+     * $onDate (Y-m-d) keeps only customers who have a booking that day;
+     * null searches all customers. `booking_count` is always the all-time total.
      *
      * @return array<int,array<string,mixed>>
      */
-    public function search(string $q, int $limit = 8): array
+    public function search(string $q, int $limit = 8, ?string $onDate = null): array
     {
         // Escape LIKE wildcards so a literal % or _ in the query isn't a wildcard.
         $like = '%' . addcslashes($q, '%_\\') . '%';
@@ -56,12 +59,19 @@ final class CustomerRepository
                        COUNT(r.id) AS booking_count
                 FROM tbl_customers c
                 LEFT JOIN tbl_reservation r ON r.customer_id = c.id
-                WHERE c.name LIKE :q1 OR c.phone1 LIKE :q2 OR c.email LIKE :q3
-                GROUP BY c.id, c.name, c.phone1, c.email
-                ORDER BY c.name
-                LIMIT ' . max(1, $limit);
+                WHERE (c.name LIKE :q1 OR c.phone1 LIKE :q2 OR c.email LIKE :q3)';
+        $params = ['q1' => $like, 'q2' => $like, 'q3' => $like];
+        if ($onDate !== null) {
+            $sql .= ' AND EXISTS (SELECT 1 FROM tbl_reservation r2
+                                  WHERE r2.customer_id = c.id
+                                    AND DATE(r2.reservationTime) = :d)';
+            $params['d'] = $onDate;
+        }
+        $sql .= ' GROUP BY c.id, c.name, c.phone1, c.email
+                  ORDER BY c.name
+                  LIMIT ' . max(1, $limit);
         $stmt = $this->pdo->prepare($sql);
-        $stmt->execute(['q1' => $like, 'q2' => $like, 'q3' => $like]);
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }

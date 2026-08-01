@@ -70,14 +70,22 @@ Owner detection keywords live in `config/config.php` → `owner_title_keywords`.
 ## Configuration (`config/config.php`)
 
 ```
+Name: app_name  "Quinos Reservations"  (first word plain, rest in accent colour)
 DB:   host 127.0.0.1  db db_reservation  user root  pass (from DB_PASS)
 Grid: 07:00 – 21:00, 30-minute slots
 ```
 
+Rename the app by setting `app_name` — it drives the header, login page, search
+page, and browser titles. `APP_NAME` works as an env var too.
+
 All DB values can be overridden with env vars (`DB_HOST`, `DB_NAME`, `DB_USER`,
-`DB_PASS`, …) without editing code. **No password is committed** — set
-`DB_PASS` in the environment (`SetEnv DB_PASS …` in Apache, or the system env),
-or type your local password into `config/config.php` and don't commit it.
+`DB_PASS`, …) without editing code. **No password is committed.** Put machine
+-specific values in **`config/local.php`** (gitignored) — it's merged over the
+defaults, so only the keys you list change:
+
+```php
+<?php return ['db' => ['pass' => 'your-password']];
+```
 
 ## Local development
 
@@ -91,6 +99,7 @@ php -S 127.0.0.1:8099 index.php   # http://127.0.0.1:8099
 | Method | Path | Role | Purpose |
 |---|---|---|---|
 | GET/POST | `/login`, `/logout` | any | Session auth |
+| GET | `/search?q=&scope=today\|all` | staff | Landing page: search box + results |
 | GET | `/grid?date=&view=room\|therapist&section=` | staff | Table/Therapist × time board |
 | GET | `/calendar?month=` | staff | Month overview |
 | GET/POST | `/reservations/new`, `/reservations` | staff | Create booking |

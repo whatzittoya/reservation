@@ -267,14 +267,15 @@ final class ReservationRepository
     }
 
     /**
-     * Free-text search across every date, for the header search box: matches the
-     * linked customer's name, the name/phone stored on the booking itself, and
-     * the table name. Nearest-to-now first, so today's bookings surface before
-     * last year's.
+     * Free-text search for the search page: matches the linked customer's name,
+     * the name/phone stored on the booking itself, and the table name.
+     * Nearest-to-now first, so today's bookings surface before last year's.
+     *
+     * $onDate (Y-m-d) limits the search to a single day; null searches every date.
      *
      * @return array<int,array<string,mixed>>
      */
-    public function search(string $q, int $limit = 12): array
+    public function search(string $q, int $limit = 12, ?string $onDate = null): array
     {
         // Escape LIKE wildcards so a literal % or _ in the query isn't a wildcard.
         $like = '%' . addcslashes($q, '%_\\') . '%';
@@ -286,12 +287,17 @@ final class ReservationRepository
                 FROM tbl_reservation r
                 LEFT JOIN tbl_customers c ON c.id = r.customer_id
                 LEFT JOIN tbl_employees st ON st.id = r.servedBy_id
-                WHERE c.name LIKE :q1 OR r.name LIKE :q2 OR r.phone LIKE :q3
-                   OR r.tableName LIKE :q4
-                ORDER BY ABS(TIMESTAMPDIFF(MINUTE, NOW(), r.reservationTime)) ASC
-                LIMIT ' . max(1, $limit);
+                WHERE (c.name LIKE :q1 OR r.name LIKE :q2 OR r.phone LIKE :q3
+                       OR r.tableName LIKE :q4)';
+        $params = ['q1' => $like, 'q2' => $like, 'q3' => $like, 'q4' => $like];
+        if ($onDate !== null) {
+            $sql .= ' AND DATE(r.reservationTime) = :d';
+            $params['d'] = $onDate;
+        }
+        $sql .= ' ORDER BY ABS(TIMESTAMPDIFF(MINUTE, NOW(), r.reservationTime)) ASC
+                  LIMIT ' . max(1, $limit);
         $stmt = $this->pdo->prepare($sql);
-        $stmt->execute(['q1' => $like, 'q2' => $like, 'q3' => $like, 'q4' => $like]);
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }
