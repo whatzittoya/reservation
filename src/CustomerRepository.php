@@ -93,16 +93,39 @@ final class CustomerRepository
      */
     public function create(array $data): int
     {
-        $sql = 'INSERT INTO tbl_customers (active, name, phone1, email, notes, created, type)
-                VALUES (b\'1\', :name, :phone, :email, :notes, CURDATE(), \'P\')';
+        $sql = 'INSERT INTO tbl_customers (active, name, phone1, code, email, notes, created, type)
+                VALUES (b\'1\', :name, :phone, :code, :email, :notes, CURDATE(), \'P\')';
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([
             'name'  => $data['name'],
             'phone' => $data['phone'] ?? null,
+            // The POS customer code is the phone number, matching how the
+            // existing records are keyed. Not the same thing as the Quinos
+            // Cloud code, which CustomerSync derives from the local id.
+            'code'  => $data['phone'] ?? null,
             'email' => $data['email'] ?? null,
             'notes' => $data['notes'] ?? null,
         ]);
 
         return (int) $this->pdo->lastInsertId();
+    }
+
+    /**
+     * Update the fields this app owns. Every other POS column is left alone.
+     *
+     * @param array<string,mixed> $data name, phone, email, notes
+     */
+    public function update(int $id, array $data): void
+    {
+        $sql = 'UPDATE tbl_customers
+                   SET name = :name, phone1 = :phone, email = :email, notes = :notes
+                 WHERE id = :id';
+        $this->pdo->prepare($sql)->execute([
+            'id'    => $id,
+            'name'  => $data['name'],
+            'phone' => $data['phone'] ?? null,
+            'email' => $data['email'] ?? null,
+            'notes' => $data['notes'] ?? null,
+        ]);
     }
 }

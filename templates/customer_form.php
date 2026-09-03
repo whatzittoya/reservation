@@ -2,16 +2,20 @@
 /** @var string $basePath */
 /** @var array $data */
 /** @var array $errors */
+/** @var array|null $customer  null = creating, a row = editing */
 $e = static fn ($v) => htmlspecialchars((string) ($v ?? ''), ENT_QUOTES);
 $err = static fn ($k) => isset($errors[$k]) ? '<div class="error">' . htmlspecialchars($errors[$k]) . '</div>' : '';
+$editing = $customer !== null;
+$action  = $editing ? $basePath . '/customers/' . (int) $customer['id'] : $basePath . '/customers';
+$back    = $editing ? $basePath . '/customers/' . (int) $customer['id'] : $basePath . '/customers';
 ?>
 <div class="toolbar">
-    <h1>New Customer</h1>
-    <a class="btn" href="<?= $basePath ?>/customers">← Back</a>
+    <h1><?= $editing ? 'Edit Customer' : 'New Customer' ?></h1>
+    <a class="btn" href="<?= $back ?>">← Back</a>
 </div>
 
 <div class="card" style="max-width:520px;">
-    <form method="post" action="<?= $basePath ?>/customers">
+    <form method="post" action="<?= $action ?>">
         <label>Name *</label>
         <input type="text" name="name" value="<?= $e($data['name'] ?? '') ?>" autofocus required>
         <?= $err('name') ?>
@@ -29,10 +33,11 @@ $err = static fn ($k) => isset($errors[$k]) ? '<div class="error">' . htmlspecia
 
         <label>Notes</label>
         <textarea name="notes" rows="2"><?= $e($data['notes'] ?? '') ?></textarea>
+        <div class="muted" style="font-size:12px;margin-top:4px;">Stays on this server — the cloud has no notes field.</div>
 
         <div class="actions">
-            <button type="submit" class="btn btn-primary">Create customer</button>
-            <a class="btn" href="<?= $basePath ?>/customers">Cancel</a>
+            <button type="submit" class="btn btn-primary"><?= $editing ? 'Save changes' : 'Create customer' ?></button>
+            <a class="btn" href="<?= $back ?>">Cancel</a>
         </div>
     </form>
 </div>

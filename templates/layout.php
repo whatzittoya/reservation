@@ -54,7 +54,19 @@ $rel = $basePath !== '' && str_starts_with($path, $basePath) ? substr($path, str
         table.list th,table.list td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);font-size:14px;}
         table.list th{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.03em;}
         .muted{color:var(--muted);}
-        .flash{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;padding:9px 13px;border-radius:8px;margin-bottom:14px;}
+        .flash{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;padding:9px 13px;border-radius:8px;margin-bottom:14px;font-size:14px;}
+        .flash.err{background:var(--cancel);border-color:var(--cancel-bd);color:var(--cancel-ink);}
+        .note{background:#fffbeb;border:1px solid var(--booked-bd);color:var(--booked-ink);padding:9px 13px;border-radius:8px;margin-bottom:14px;font-size:13px;}
+        .cloud{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:700;}
+        .cloud.ok{background:var(--arrived);color:var(--arrived-ink);}
+        .cloud.bad{background:var(--cancel);color:var(--cancel-ink);}
+        .cloud.off{background:#eef1f4;color:var(--muted);}
+        /* list filter box — see the [data-filter] script at the foot of the page */
+        .filterbar{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
+        .filterbar input{width:280px;padding:8px 11px;}
+        .filterbar .count{font-size:13px;color:var(--muted);white-space:nowrap;}
+        .filterbar .count.none{color:var(--danger);font-weight:600;}
+        .f-hide{display:none !important;}
         .badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:700;}
         .badge.s0{background:var(--booked);color:var(--booked-ink);}
         .badge.s1{background:var(--arrived);color:var(--arrived-ink);}
@@ -111,6 +123,10 @@ $rel = $basePath !== '' && str_starts_with($path, $basePath) ? substr($path, str
     </header>
 <?php endif; ?>
     <main>
+        <?php $flash = \App\Flash::take(); ?>
+        <?php if ($flash !== null): ?>
+            <div class="flash<?= $flash['type'] === 'err' ? ' err' : '' ?>"><?= $e($flash['text']) ?></div>
+        <?php endif; ?>
         <?= $content ?>
     </main>
 
@@ -126,6 +142,46 @@ $rel = $basePath !== '' && str_starts_with($path, $basePath) ? substr($path, str
             </div>
         </form>
     </dialog>
+    <script>
+    /* Instant filter for any list page.
+
+       <input data-filter=".js-row"> hides every .js-row whose text doesn't
+       contain what was typed. An element marked data-filter-group (a section
+       card, say) hides itself once all of its own rows are gone, so empty
+       groups don't leave headings floating. Purely client-side: it filters the
+       rows already on the page, which is what these list pages hold. */
+    (function () {
+        document.querySelectorAll('input[data-filter]').forEach(function (box) {
+            var sel = box.getAttribute('data-filter');
+            var counter = box.parentNode.querySelector('.count');
+            var noun = box.getAttribute('data-noun') || 'match';
+
+            function apply() {
+                var q = box.value.trim().toLowerCase();
+                var shown = 0;
+                document.querySelectorAll(sel).forEach(function (row) {
+                    var hit = q === '' || row.textContent.toLowerCase().indexOf(q) !== -1;
+                    row.classList.toggle('f-hide', !hit);
+                    if (hit) { shown++; }
+                });
+                document.querySelectorAll('[data-filter-group]').forEach(function (g) {
+                    var any = g.querySelector(sel + ':not(.f-hide)');
+                    g.classList.toggle('f-hide', !any);
+                });
+                if (counter) {
+                    counter.textContent = q === ''
+                        ? ''
+                        : shown + ' ' + noun + (shown === 1 ? '' : 'es');
+                    counter.classList.toggle('none', q !== '' && shown === 0);
+                }
+            }
+
+            box.addEventListener('input', apply);
+            box.addEventListener('search', apply);
+        });
+    })();
+    </script>
+
     <script>
     /* Any <form data-confirm="…"> asks first, in a real modal dialog.
        Optional: data-confirm-title, data-confirm-ok (button label),

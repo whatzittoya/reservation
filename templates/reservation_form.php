@@ -7,6 +7,8 @@
 /** @var array $groups */
 /** @var array $therapists */
 /** @var array $slotTimes */
+/** @var int $slotMinutes */
+/** @var int $slotCount */
 /** @var array $statuses */
 /** @var string $appType */    // 'resto' | 'spa'
 /** @var string $roomLabel */  // 'Table' | 'Room'
@@ -104,6 +106,28 @@ $err = static fn ($k) => isset($errors[$k]) ? '<div class="error">' . htmlspecia
                     <?php endforeach; ?>
                 </select>
                 <?= $err('booking_time') ?>
+            </div>
+            <div>
+                <label>Duration</label>
+                <select name="duration_slots">
+                    <?php
+                    // One option per bookable block. A booking that would run past
+                    // closing is rejected server-side, so the list stays simple.
+                    $selSlots = max(1, (int) ($data['duration_slots'] ?? 1));
+                    for ($i = 1; $i <= max(1, (int) $slotCount); $i++):
+                        $mins = $i * (int) $slotMinutes;
+                        $h = intdiv($mins, 60);
+                        $m = $mins % 60;
+                        $label = $h > 0 ? $h . ' hour' . ($h === 1 ? '' : 's') : '';
+                        if ($m > 0) {
+                            $label .= ($label !== '' ? ' ' : '') . $m . ' min';
+                        }
+                        $label .= ' (' . $i . ' slot' . ($i === 1 ? '' : 's') . ')';
+                    ?>
+                        <option value="<?= $i ?>" <?= $selSlots === $i ? 'selected' : '' ?>><?= $e($label) ?></option>
+                    <?php endfor; ?>
+                </select>
+                <?= $err('duration_slots') ?>
             </div>
             <div>
                 <label>Status</label>

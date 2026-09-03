@@ -22,6 +22,37 @@ final class TimeGrid
         $this->closeMin = self::toMinutes($closeTime);
     }
 
+    /** Minutes per grid column — the unit a booking's duration is measured in. */
+    public function slotMinutes(): int
+    {
+        return $this->slotMinutes;
+    }
+
+    /**
+     * How many grid columns a booking of $durationMinutes covers.
+     * NULL (or anything under one slot) means the old point-in-time behaviour:
+     * exactly one column.
+     */
+    public function spanFor(?int $durationMinutes): int
+    {
+        if ($durationMinutes === null || $durationMinutes <= $this->slotMinutes) {
+            return 1;
+        }
+
+        return (int) ceil($durationMinutes / $this->slotMinutes);
+    }
+
+    /**
+     * Slots still available from $time to closing — the cap on how long a
+     * booking starting there may run.
+     */
+    public function slotsRemainingFrom(string $time): int
+    {
+        $idx = $this->slotIndexFor($time);
+
+        return $idx === null ? 0 : $this->slotCount() - $idx;
+    }
+
     public function slotCount(): int
     {
         return (int) max(0, ($this->closeMin - $this->openMin) / $this->slotMinutes);

@@ -47,6 +47,7 @@ final class ReservationRepository
     {
         $sql = 'SELECT r.id, r.reservationTime, r.cover, r.name, r.phone, r.notes,
                        r.status, r.tableName, r.customer_id, r.voidReason, r.servedBy_id,
+                       r.duration_minutes,
                        c.name AS customer_name,
                        e.name AS reserved_by_name,
                        st.name AS served_by_name
@@ -111,33 +112,65 @@ final class ReservationRepository
     }
 
     /**
-     * Is the same table already booked at the exact same date+time?
+     * Does a booking of $durationMinutes starting at $reservationTime overlap an
+     * existing booking of the same table?
+     *
+     * Comparing start times for equality is not enough once a booking can span
+     * several slots: a 14:00 two-hour booking has to block a new 15:00 one even
+     * though the two start times differ. Two intervals overlap when each starts
+     * before the other ends. $defaultMinutes is the grid's slot size, used for
+     * the older rows whose duration_minutes is NULL (they occupy one slot).
+     *
      * Cancelled reservations don't count; $exceptId ignores the row being edited.
      */
-    public function slotTaken(string $tableName, string $reservationTime, ?int $exceptId = null): bool
-    {
-        $sql = 'SELECT COUNT(*) FROM tbl_reservation
-                WHERE tableName = :t AND reservationTime = :rt AND status <> :cancelled';
-        $params = ['t' => $tableName, 'rt' => $reservationTime, 'cancelled' => self::STATUS_CANCELLED];
-        if ($exceptId !== null) {
-            $sql .= ' AND id <> :id';
-            $params['id'] = $exceptId;
-        }
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($params);
-
-        return (int) $stmt->fetchColumn() > 0;
+    public function slotTaken(
+        string $tableName,
+        string $reservationTime,
+        int $durationMinutes,
+        int $defaultMinutes,
+        ?int $exceptId = null
+    ): bool {
+        return $this->overlaps('tableName = :res', ['res' => $tableName], $reservationTime, $durationMinutes, $defaultMinutes, $exceptId);
     }
 
     /**
-     * Is the same therapist already booked at the exact same date+time?
-     * Cancelled reservations don't count; $exceptId ignores the row being edited.
+     * Same interval-overlap test for a therapist (spa mode).
      */
-    public function therapistTaken(int $servedById, string $reservationTime, ?int $exceptId = null): bool
-    {
+    public function therapistTaken(
+        int $servedById,
+        string $reservationTime,
+        int $durationMinutes,
+        int $defaultMinutes,
+        ?int $exceptId = null
+    ): bool {
+        return $this->overlaps('servedBy_id = :res', ['res' => $servedById], $reservationTime, $durationMinutes, $defaultMinutes, $exceptId);
+    }
+
+    /**
+     * Shared overlap query for both bookable resources.
+     *
+     * @param array<string,mixed> $resourceParams
+     */
+    private function overlaps(
+        string $resourceWhere,
+        array $resourceParams,
+        string $reservationTime,
+        int $durationMinutes,
+        int $defaultMinutes,
+        ?int $exceptId
+    ): bool {
         $sql = 'SELECT COUNT(*) FROM tbl_reservation
-                WHERE servedBy_id = :s AND reservationTime = :rt AND status <> :cancelled';
-        $params = ['s' => $servedById, 'rt' => $reservationTime, 'cancelled' => self::STATUS_CANCELLED];
+                WHERE ' . $resourceWhere . '
+                  AND status <> :cancelled
+                  AND reservationTime < DATE_ADD(:start, INTERVAL :dur MINUTE)
+                  AND DATE_ADD(reservationTime, INTERVAL COALESCE(duration_minutes, :def) MINUTE) > :start2';
+        $params = $resourceParams + [
+            'cancelled' => self::STATUS_CANCELLED,
+            'start'     => $reservationTime,
+            'start2'    => $reservationTime,
+            'dur'       => max(1, $durationMinutes),
+            'def'       => max(1, $defaultMinutes),
+        ];
         if ($exceptId !== null) {
             $sql .= ' AND id <> :id';
             $params['id'] = $exceptId;
@@ -175,14 +208,15 @@ final class ReservationRepository
     public function create(array $d): int
     {
         $sql = 'INSERT INTO tbl_reservation
-                    (created, reservationTime, cover, name, phone, notes,
+                    (created, reservationTime, duration_minutes, cover, name, phone, notes,
                      tableName, status, customer_id, reservedBy_id, servedBy_id)
                 VALUES
-                    (NOW(), :rt, :cover, :name, :phone, :notes,
+                    (NOW(), :rt, :duration, :cover, :name, :phone, :notes,
                      :tableName, :status, :customer_id, :reservedBy_id, :servedBy_id)';
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([
             'rt'            => $d['reservationTime'],
+            'duration'      => $d['duration_minutes'] ?? null,
             'cover'         => $d['cover'],
             'name'          => $d['name'],
             'phone'         => $d['phone'] ?? null,
@@ -201,8 +235,9 @@ final class ReservationRepository
     public function update(int $id, array $d): bool
     {
         $sql = 'UPDATE tbl_reservation SET
-                    reservationTime = :rt,
-                    cover           = :cover,
+                    reservationTime  = :rt,
+                    duration_minutes = :duration,
+                    cover            = :cover,
                     name            = :name,
                     phone           = :phone,
                     notes           = :notes,
@@ -216,6 +251,7 @@ final class ReservationRepository
         return $stmt->execute([
             'id'          => $id,
             'rt'          => $d['reservationTime'],
+            'duration'    => $d['duration_minutes'] ?? null,
             'cover'       => $d['cover'],
             'name'        => $d['name'],
             'phone'       => $d['phone'] ?? null,

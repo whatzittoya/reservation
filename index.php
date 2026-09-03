@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 use App\Auth;
 use App\AuthMiddleware;
+use App\CloudClient;
 use App\CustomerRepository;
+use App\CustomerSync;
+use App\CustomerSyncRepository;
 use App\Database;
 use App\EmployeeRepository;
 use App\ReservationRepository;
@@ -45,6 +48,15 @@ $tables       = new TableRepository($pdo);
 $reservations = new ReservationRepository($pdo);
 $auth         = new Auth($employees, $config['owner_title_keywords']);
 
+// Cloud sync — inert until config/local.php carries both API-KEY and TOKEN.
+$syncState    = new CustomerSyncRepository($pdo);
+$customerSync = new CustomerSync(
+    new CloudClient($config['cloud']),
+    $customers,
+    $syncState,
+    (string) $config['cloud']['code_prefix'],
+);
+
 /**
  * Brand mark for the header, login and search pages: the first word plain,
  * everything after it in the accent colour. Returns ready-to-echo HTML.
@@ -76,6 +88,8 @@ $container = [
     'customers'    => $customers,
     'tables'       => $tables,
     'reservations' => $reservations,
+    'syncState'    => $syncState,
+    'customerSync' => $customerSync,
     'view'         => $renderer,
 ];
 

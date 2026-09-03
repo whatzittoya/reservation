@@ -23,7 +23,19 @@ $hasTherapist = !empty($r['servedBy_id']);
         <?php if ($isSpa || $hasTherapist): ?>
             <tr><th>Therapist</th><td><?= $e($r['served_by_name']) ?: '<span class="muted">—</span>' ?></td></tr>
         <?php endif; ?>
-        <tr><th>Date &amp; time</th><td><?= $e(date('l, d M Y — H:i', strtotime((string) $r['reservationTime']))) ?></td></tr>
+        <?php
+            // Bookings can span several slots; show the range and length when so.
+            $durMin = (int) ($r['duration_minutes'] ?? 0);
+            $startTs = strtotime((string) $r['reservationTime']);
+            $when = date('l, d M Y — H:i', $startTs);
+            if ($durMin > 0) {
+                $when .= '–' . date('H:i', $startTs + $durMin * 60);
+            }
+        ?>
+        <tr><th>Date &amp; time</th><td><?= $e($when) ?></td></tr>
+        <?php if ($durMin > 0): ?>
+            <tr><th>Duration</th><td><?= $e(intdiv($durMin, 60) > 0 ? intdiv($durMin, 60) . 'h' . ($durMin % 60 ? ' ' . ($durMin % 60) . 'm' : '') : $durMin . ' min') ?></td></tr>
+        <?php endif; ?>
         <tr><th>Guests</th><td><?= (int) $r['cover'] ?> pax</td></tr>
         <tr><th>Phone</th><td><?= $e($r['phone']) ?: '<span class="muted">—</span>' ?></td></tr>
         <tr><th>Notes</th><td><?= nl2br($e($r['notes'])) ?: '<span class="muted">—</span>' ?></td></tr>

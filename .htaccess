@@ -1,8 +1,14 @@
-# Front controller for XAMPP / Apache.
-# Works at localhost/reservation without touching httpd.conf.
+# Front controller for Apache / LiteSpeed.
+# Works at the document root or in a subfolder without touching httpd.conf.
 
 <IfModule mod_rewrite.c>
     RewriteEngine On
+
+    # Deny source, config, dependencies and SQL FIRST.
+    # This has to come before the "serve existing files" rule below: that rule
+    # ends in [L], so anything matching it stops rewriting immediately and this
+    # block would never be reached.
+    RewriteRule ^(config|src|templates|vendor|sql)/ - [F,L]
 
     # Serve existing files/directories directly (assets, etc.)
     RewriteCond %{REQUEST_FILENAME} -f [OR]
@@ -13,9 +19,7 @@
     RewriteRule ^ index.php [QSA,L]
 </IfModule>
 
-# Never serve source, config, dependencies, or SQL over HTTP.
-RewriteRule ^(config|src|templates|vendor|sql)/ - [F,L]
-
+# Belt and braces for hosts without mod_rewrite: never serve these by extension.
 <FilesMatch "\.(sql|md|json|lock|dist|ya?ml)$">
     Require all denied
 </FilesMatch>

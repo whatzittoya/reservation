@@ -8,8 +8,9 @@
 /** @var string $appType */    // 'resto' | 'spa'
 /** @var string $roomLabel */  // 'Table' | 'Room'
 /** @var array $sectionIds */
+/** @var array $sectionLabels */
 /** @var int|null $section */
-/** @var array $placed */      // rowKey => [slotIndex => reservation]
+/** @var array $placed */      // rowKey => [slotIndex => ['res'=>reservation,'span'=>int]]
 /** @var array $totals */
 $e = static fn ($v) => htmlspecialchars((string) ($v ?? ''), ENT_QUOTES);
 $slotCount = count($slots);
@@ -86,7 +87,7 @@ $jsSuffix = $section ? " + '&section=" . (int) $section . "'" : '';
     <div style="display:flex;gap:6px;flex-wrap:wrap;">
         <a class="segbtn <?= $section === null ? 'on' : '' ?>" href="<?= $basePath ?>/grid?date=<?= $e($date) ?>">All sections</a>
         <?php foreach ($sectionIds as $sid): ?>
-            <a class="segbtn <?= $section === $sid ? 'on' : '' ?>" href="<?= $basePath ?>/grid?date=<?= urlencode($date) ?>&section=<?= $sid ?>"><?= $e(\App\TableRepository::sectionLabel($sid)) ?></a>
+            <a class="segbtn <?= $section === $sid ? 'on' : '' ?>" href="<?= $basePath ?>/grid?date=<?= urlencode($date) ?>&section=<?= $sid ?>"><?= $e($sectionLabels[$sid] ?? ('Section ' . $sid)) ?></a>
         <?php endforeach; ?>
     </div>
 </div>
@@ -123,9 +124,28 @@ $jsSuffix = $section ? " + '&section=" . (int) $section . "'" : '';
                 ?>
                 <tr>
                     <th class="rowhead"><?= $e($rowName) ?></th>
+                    <?php
+                        // A multi-slot booking is drawn once with a colspan; $skip
+                        // swallows the columns it covers so the row keeps its width.
+                        $skip = 0;
+                    ?>
                     <?php foreach ($slots as $s): $idx = $s['index']; ?>
-                        <?php if (isset($map[$idx])): $r = $map[$idx]; $st = (int) $r['status']; ?>
-                            <td class="cell">
+                        <?php if ($skip > 0) { $skip--; continue; } ?>
+                        <?php if (isset($map[$idx])):
+                            $r = $map[$idx]['res'];
+                            $st = (int) $r['status'];
+                            // Never run past the last column, whatever the stored duration.
+                            $span = max(1, min((int) $map[$idx]['span'], $slotCount - $idx));
+                            $skip = $span - 1;
+                            // "19:00–21:00" for a booking longer than one slot.
+                            $startHHMM = substr((string) $r['reservationTime'], 11, 5);
+                            $endHHMM = date('H:i', strtotime((string) $r['reservationTime'])
+                                + ((int) ($r['duration_minutes'] ?: 0) ?: 0) * 60);
+                            $timeLabel = ((int) ($r['duration_minutes'] ?? 0) > 0 && $span > 1)
+                                ? $startHHMM . '–' . $endHHMM
+                                : $startHHMM;
+                        ?>
+                            <td class="cell" colspan="<?= $span ?>">
                                 <?php
                                     // On a room row show who serves it; on a therapist
                                     // row show which room — so each cell names the pair.
@@ -134,11 +154,14 @@ $jsSuffix = $section ? " + '&section=" . (int) $section . "'" : '';
                                         : (string) ($isSpa ? ($r['served_by_name'] ?? '') : '');
                                     $sub = $pair !== '' ? $pair . ' · ' . (int) $r['cover'] . ' pax'
                                                         : (int) $r['cover'] . ' pax';
+                                    if ($span > 1) {
+                                        $sub = $timeLabel . ' · ' . $sub;
+                                    }
                                 ?>
                                 <a class="resblock s<?= $st ?>" href="<?= $basePath ?>/reservations/<?= (int) $r['id'] ?>"
                                    data-res="<?= (int) $r['id'] ?>"
                                    data-name="<?= $e($r['customer_name'] ?? $r['name']) ?>"
-                                   title="<?= $e($r['customer_name'] ?? $r['name']) ?> — <?= $e(substr((string)$r['reservationTime'],11,5)) ?><?= $pair !== '' ? ' — ' . $e($pair) : '' ?>">
+                                   title="<?= $e($r['customer_name'] ?? $r['name']) ?> — <?= $e($timeLabel) ?><?= $pair !== '' ? ' — ' . $e($pair) : '' ?>">
                                     <b><?= $e($r['customer_name'] ?? $r['name'] ?: 'Guest') ?></b>
                                     <small><?= $e($sub) ?></small>
                                 </a>
