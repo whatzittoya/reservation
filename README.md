@@ -366,6 +366,24 @@ therapist in spa mode, so both locked resources honour the full range.
 A booking that would run past closing time is rejected with the number of blocks
 that would actually fit.
 
+## Upgrading an existing install
+
+An install that was set up before these features has an older database. The app
+detects what is missing and keeps working — sections fall back to `Section 1`,
+`Section 2`… when `tbl_sections` is absent, and bookings stay one slot long when
+`duration_minutes` is absent — but to get the features, run the migration once:
+
+```bash
+mysql -u root -p db_reservation < sql/schema.sql
+```
+
+It is idempotent and additive: it creates `tbl_customer_cloud_sync`, adds
+`tbl_reservation.duration_minutes`, and seeds placeholder therapists only when
+the database has none. No existing POS table is altered otherwise.
+
+Symptom of skipping it: `Unknown column 'r.duration_minutes'` or
+`Table '…tbl_sections' doesn't exist` as a Slim Application Error.
+
 ## Deploying the database to cPanel
 
 A ready-to-import dump is produced with:

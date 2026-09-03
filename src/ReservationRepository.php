@@ -34,8 +34,31 @@ final class ReservationRepository
         return self::statusLabels()[$status] ?? 'Booked';
     }
 
+    private ?bool $hasDuration = null;
+
     public function __construct(private PDO $pdo)
     {
+    }
+
+    /**
+     * Whether `duration_minutes` exists on this database.
+     *
+     * The column arrived with multi-slot bookings (see sql/schema.sql). An
+     * install that has not run that migration still works: bookings are
+     * one slot long, exactly as before. Checked once per request.
+     */
+    public function supportsDuration(): bool
+    {
+        if ($this->hasDuration === null) {
+            try {
+                $this->pdo->query('SELECT duration_minutes FROM tbl_reservation LIMIT 1');
+                $this->hasDuration = true;
+            } catch (\PDOException) {
+                $this->hasDuration = false;
+            }
+        }
+
+        return $this->hasDuration;
     }
 
     /**
@@ -47,7 +70,7 @@ final class ReservationRepository
     {
         $sql = 'SELECT r.id, r.reservationTime, r.cover, r.name, r.phone, r.notes,
                        r.status, r.tableName, r.customer_id, r.voidReason, r.servedBy_id,
-                       r.duration_minutes,
+                       ' . ($this->supportsDuration() ? 'r.duration_minutes,' : 'NULL AS duration_minutes,') . '
                        c.name AS customer_name,
                        e.name AS reserved_by_name,
                        st.name AS served_by_name
@@ -159,11 +182,17 @@ final class ReservationRepository
         int $defaultMinutes,
         ?int $exceptId
     ): bool {
+        // Without the duration column every booking is one slot, so the stored
+        // length is the grid's slot size.
+        $storedLength = $this->supportsDuration()
+            ? 'COALESCE(duration_minutes, :def)'
+            : ':def';
+
         $sql = 'SELECT COUNT(*) FROM tbl_reservation
                 WHERE ' . $resourceWhere . '
                   AND status <> :cancelled
                   AND reservationTime < DATE_ADD(:start, INTERVAL :dur MINUTE)
-                  AND DATE_ADD(reservationTime, INTERVAL COALESCE(duration_minutes, :def) MINUTE) > :start2';
+                  AND DATE_ADD(reservationTime, INTERVAL ' . $storedLength . ' MINUTE) > :start2';
         $params = $resourceParams + [
             'cancelled' => self::STATUS_CANCELLED,
             'start'     => $reservationTime,
@@ -207,16 +236,15 @@ final class ReservationRepository
      */
     public function create(array $d): int
     {
+        $withDuration = $this->supportsDuration();
         $sql = 'INSERT INTO tbl_reservation
-                    (created, reservationTime, duration_minutes, cover, name, phone, notes,
+                    (created, reservationTime, ' . ($withDuration ? 'duration_minutes, ' : '') . 'cover, name, phone, notes,
                      tableName, status, customer_id, reservedBy_id, servedBy_id)
                 VALUES
-                    (NOW(), :rt, :duration, :cover, :name, :phone, :notes,
+                    (NOW(), :rt, ' . ($withDuration ? ':duration, ' : '') . ':cover, :name, :phone, :notes,
                      :tableName, :status, :customer_id, :reservedBy_id, :servedBy_id)';
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute([
+        $params = [
             'rt'            => $d['reservationTime'],
-            'duration'      => $d['duration_minutes'] ?? null,
             'cover'         => $d['cover'],
             'name'          => $d['name'],
             'phone'         => $d['phone'] ?? null,
@@ -226,7 +254,11 @@ final class ReservationRepository
             'customer_id'   => $d['customer_id'] ?? null,
             'reservedBy_id' => $d['reservedBy_id'] ?? null,
             'servedBy_id'   => $d['servedBy_id'] ?? null,
-        ]);
+        ];
+        if ($withDuration) {
+            $params['duration'] = $d['duration_minutes'] ?? null;
+        }
+        $this->pdo->prepare($sql)->execute($params);
 
         return (int) $this->pdo->lastInsertId();
     }
@@ -234,9 +266,10 @@ final class ReservationRepository
     /** @param array<string,mixed> $d */
     public function update(int $id, array $d): bool
     {
+        $withDuration = $this->supportsDuration();
         $sql = 'UPDATE tbl_reservation SET
                     reservationTime  = :rt,
-                    duration_minutes = :duration,
+                    ' . ($withDuration ? 'duration_minutes = :duration,' : '') . '
                     cover            = :cover,
                     name            = :name,
                     phone           = :phone,
@@ -246,12 +279,9 @@ final class ReservationRepository
                     customer_id     = :customer_id,
                     servedBy_id     = :servedBy_id
                 WHERE id = :id';
-        $stmt = $this->pdo->prepare($sql);
-
-        return $stmt->execute([
+        $params = [
             'id'          => $id,
             'rt'          => $d['reservationTime'],
-            'duration'    => $d['duration_minutes'] ?? null,
             'cover'       => $d['cover'],
             'name'        => $d['name'],
             'phone'       => $d['phone'] ?? null,
@@ -260,7 +290,12 @@ final class ReservationRepository
             'status'      => $d['status'] ?? self::STATUS_BOOKED,
             'customer_id' => $d['customer_id'] ?? null,
             'servedBy_id' => $d['servedBy_id'] ?? null,
-        ]);
+        ];
+        if ($withDuration) {
+            $params['duration'] = $d['duration_minutes'] ?? null;
+        }
+
+        return $this->pdo->prepare($sql)->execute($params);
     }
 
     /**

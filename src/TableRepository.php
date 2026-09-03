@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App;
 
 use PDO;
+use PDOException;
 
 /**
  * Access to the existing POS `tbl_tables` table (the bookable resources).
@@ -14,6 +15,8 @@ final class TableRepository
 {
     /** @var array<int,string>|null id => name, loaded once per request. */
     private ?array $sections = null;
+
+    private ?bool $hasSections = null;
 
     public function __construct(private PDO $pdo)
     {
@@ -34,9 +37,15 @@ final class TableRepository
         }
 
         $out = [];
-        foreach ($this->pdo->query('SELECT id, name FROM tbl_sections ORDER BY position, id')->fetchAll() as $row) {
-            $name = trim((string) $row['name']);
-            $out[(int) $row['id']] = $name !== '' ? $name : ('Section ' . (int) $row['id']);
+        try {
+            foreach ($this->pdo->query('SELECT id, name FROM tbl_sections ORDER BY position, id')->fetchAll() as $row) {
+                $name = trim((string) $row['name']);
+                $out[(int) $row['id']] = $name !== '' ? $name : ('Section ' . (int) $row['id']);
+            }
+        } catch (PDOException) {
+            // Older POS databases (a partial dump, say) have no tbl_sections at
+            // all. Fall back to numbered labels rather than taking down every
+            // page that draws the grid.
         }
         foreach ($this->sectionIds() as $id) {
             $out[$id] ??= 'Section ' . $id;
@@ -54,6 +63,9 @@ final class TableRepository
      */
     public function createSection(string $name): int
     {
+        if (!$this->hasSectionsTable()) {
+            throw new \RuntimeException('This database has no tbl_sections table, so sections cannot be created.');
+        }
         $stmt = $this->pdo->prepare(
             'INSERT INTO tbl_sections (name, code, position, salesType_id)
              VALUES (:name, \'\', :position, NULL)'
@@ -68,10 +80,28 @@ final class TableRepository
     /** Is a section with this name already there? Names are how staff tell them apart. */
     public function sectionNameExists(string $name): bool
     {
+        if (!$this->hasSectionsTable()) {
+            return false;
+        }
         $stmt = $this->pdo->prepare('SELECT 1 FROM tbl_sections WHERE name = :n LIMIT 1');
         $stmt->execute(['n' => $name]);
 
         return $stmt->fetchColumn() !== false;
+    }
+
+    /** Whether this database carries the POS `tbl_sections` table at all. */
+    public function hasSectionsTable(): bool
+    {
+        if ($this->hasSections === null) {
+            try {
+                $this->pdo->query('SELECT 1 FROM tbl_sections LIMIT 1');
+                $this->hasSections = true;
+            } catch (PDOException) {
+                $this->hasSections = false;
+            }
+        }
+
+        return $this->hasSections;
     }
 
     public function sectionLabel(?int $id): string
